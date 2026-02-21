@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memento Agent — Architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --border: #1e1e2e;
+    --accent: #7c3aed;
+    --accent2: #06b6d4;
+    --accent3: #10b981;
+    --accent4: #f59e0b;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --line: rgba(124,58,237,0.3);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    min-height: 100vh;
+    padding: 48px 32px;
+    overflow-x: hidden;
+  }
+
+  .noise {
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none; z-index: 0;
+  }
+
+  .wrapper {
+    max-width: 1100px;
+    margin: 0 auto;
+    position: relative;
+    z-index: 1;
+  }
+
+  header {
+    margin-bottom: 56px;
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+  }
+
+  h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: 2.4rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: #fff;
+  }
+
+  h1 span { color: var(--accent); }
+
+  .tag {
+    font-size: 0.65rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    border-radius: 2px;
+  }
+
+  /* GRID */
+  .arch {
+    display: grid;
+    grid-template-columns: 1fr 220px 1fr;
+    grid-template-rows: auto auto auto;
+    gap: 0;
+    position: relative;
+  }
+
+  /* SECTIONS */
+  .section {
+    padding: 0 20px;
+  }
+
+  .section-label {
+    font-size: 0.6rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* CARDS */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    position: relative;
+    transition: border-color 0.2s;
+  }
+
+  .card:hover { border-color: var(--accent); }
+
+  .card-name {
+    font-family: 'Syne', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .card-name .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .card-desc {
+    font-size: 0.65rem;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .card-tech {
+    font-size: 0.6rem;
+    color: var(--accent2);
+    margin-top: 6px;
+  }
+
+  /* COLORS */
+  .c-purple { background: var(--accent); }
+  .c-cyan   { background: var(--accent2); }
+  .c-green  { background: var(--accent3); }
+  .c-amber  { background: var(--accent4); }
+  .c-red    { background: #ef4444; }
+  .c-pink   { background: #ec4899; }
+
+  /* CENTER CORE */
+  .core-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding-top: 0;
+  }
+
+  .core-box {
+    background: linear-gradient(135deg, #1a0533 0%, #0c1a2e 100%);
+    border: 1px solid var(--accent);
+    border-radius: 10px;
+    padding: 20px 16px;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 0 40px rgba(124,58,237,0.15);
+    position: relative;
+  }
+
+  .core-box::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    z-index: -1;
+    opacity: 0.4;
+  }
+
+  .core-label {
+    font-size: 0.55rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 10px;
+  }
+
+  .core-name {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: #fff;
+    margin-bottom: 4px;
+  }
+
+  .core-sub {
+    font-size: 0.6rem;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+
+  .core-modules {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 12px;
+  }
+
+  .core-module {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 0.62rem;
+    color: #a0aec0;
+    text-align: left;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .core-module span {
+    font-size: 0.55rem;
+    color: var(--accent2);
+  }
+
+  /* CONNECTORS */
+  .connectors {
+    position: relative;
+    height: 40px;
+    grid-column: 1 / -1;
+    margin: 8px 0;
+  }
+
+  /* FLOWS */
+  .flow-row {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 20px;
+    background: rgba(124,58,237,0.04);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-top: 24px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .flow-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.62rem;
+    color: var(--muted);
+  }
+
+  .flow-arrow {
+    color: var(--accent);
+    font-size: 0.8rem;
+  }
+
+  .flow-badge {
+    background: rgba(124,58,237,0.15);
+    border: 1px solid rgba(124,58,237,0.3);
+    border-radius: 3px;
+    padding: 2px 8px;
+    font-size: 0.58rem;
+    color: #a78bfa;
+    white-space: nowrap;
+  }
+
+  /* SCHEDULE */
+  .schedule-row {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-top: 16px;
+  }
+
+  .schedule-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+    border-top: 2px solid var(--accent3);
+  }
+
+  .schedule-day {
+    font-family: 'Syne', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--accent3);
+    margin-bottom: 2px;
+  }
+
+  .schedule-time {
+    font-size: 0.6rem;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+
+  .schedule-desc {
+    font-size: 0.62rem;
+    color: var(--text);
+  }
+
+  /* SVG LINES */
+  .lines-svg {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    overflow: visible;
+  }
+
+  .divider {
+    grid-column: 1 / -1;
+    height: 1px;
+    background: var(--border);
+    margin: 24px 0 20px;
+    position: relative;
+  }
+
+  .divider-label {
+    position: absolute;
+    top: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg);
+    padding: 0 12px;
+    font-size: 0.55rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  footer {
+    margin-top: 40px;
+    font-size: 0.6rem;
+    color: var(--muted);
+    text-align: center;
+    letter-spacing: 0.1em;
+  }
+
+  footer a { color: var(--accent2); text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="noise"></div>
+<div class="wrapper">
+
+  <header>
+    <h1>Memento <span>Agent</span></h1>
+    <div class="tag">Architecture v1</div>
+  </header>
+
+  <div class="arch">
+
+    <!-- LEFT: INPUTS -->
+    <div class="section">
+      <div class="section-label">Inputs / Triggers</div>
+
+      <div class="card">
+        <div class="card-name"><span class="dot c-cyan"></span>Telegram User Message</div>
+        <div class="card-desc">User mentions @MementoAcademyBot in any topic channel</div>
+        <div class="card-tech">grammY · message:text event</div>
+      </div>
+
+      <div class="card">
+        <div class="card-name"><span class="dot c-purple"></span>MEMO Token Channel</div>
+        <div class="card-desc">Any message in MEMO Token topic — no trigger required</div>
+        <div class="card-tech">threadId=8 · auto-respond</div>
+      </div>
+
+      <div class="card">
+        <div class="card-name"><span class="dot c-green"></span>New Member Join</div>
+        <div class="card-desc">Telegram chat_member event fires welcome message</div>
+        <div class="card-tech">allowed_updates: chat_member</div>
+      </div>
+
+      <div class="card">
+        <div class="card-name"><span class="dot c-amber"></span>Scheduled Cron</div>
+        <div class="card-desc">setInterval checks UTC time every 60s for weekly actions</div>
+        <div class="card-tech">scheduler.ts · no external cron</div>
+      </div>
+
+      <div class="card">
+        <div class="card-name"><span class="dot c-red"></span>Policy Violation</div>
+        <div class="card-desc">Regex detects spam, links, offensive language before routing</div>
+        <div class="card-tech">moderation.ts · early return</div>
+      </div>
+    </div>
+
+    <!-- CENTER: CORE -->
+    <div class="core-col">
+      <div class="section-label" style="text-align:center">Core Agent</div>
+      <div class="core-box">
+        <div class="core-label">Runtime</div>
+        <div class="core-name">Memo</div>
+        <div class="core-sub">Node.js · TypeScript · EC2</div>
+
+        <div class="core-modules">
+          <div class="core-module">telegram.ts <span>handler</span></div>
+          <div class="core-module">scheduler.ts <span>cron</span></div>
+          <div class="core-module">moderation.ts <span>filter</span></div>
+          <div class="core-module">memory.ts <span>SQLite</span></div>
+          <div class="core-module">prices.ts <span>CoinGecko</span></div>
+          <div class="core-module">supabase.ts <span>profiles</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: OUTPUTS / SERVICES -->
+    <div class="section">
+      <div class="section-label">Services / Outputs</div>
+
+      <div class="card">
+        <div class="card-name"><span class="dot c-purple"></span>Anthropic Claude Haiku</div>
+        <div class="card-desc">Generates all natural language responses with injected context</div>
+        <div class="card-tech">claude-haiku-4-5-20251001 · max_tokens 512</div>
+      </div>
+
+      <div class="card">
+        <div class="card-name"><span class="dot c-cyan"></span>Supabase</div>
+        <div class="card-desc">Reads profiles, game_sessions, course_progress by telegram_username</div>
+        <div class="card-tech">PostgreSQL · service_role key</div>
+      </div>
+
+      <div class="card">
+        <div class="card-name"><span class="dot c-green"></span>CoinGecko API</div>
+        <div class="card-desc">Live prices injected when price keywords detected in message</div>
+        <div class="card-tech">Free tier · /simple/price endpoint</div>
+      </div>
+
+      <div class="card">
+        <div class="card-name"><span class="dot c-amber"></span>SQLite Memory</div>
+        <div class="card-desc">Persists last 20 messages per thread key across restarts</div>
+        <div class="card-tech">better-sqlite3 · data/memory.db</div>
+      </div>
+
+      <div class="card">
+        <div class="card-name"><span class="dot c-red"></span>Owner Private Alert</div>
+        <div class="card-desc">Direct message to TELEGRAM_OWNER_ID on any moderation event</div>
+        <div class="card-tech">sendMessage · chat_id=1180001102</div>
+      </div>
+    </div>
+
+    <!-- DIVIDER -->
+    <div class="divider">
+      <span class="divider-label">Autonomous Weekly Schedule</span>
+    </div>
+
+    <!-- SCHEDULE -->
+    <div class="schedule-row">
+      <div class="schedule-item">
+        <div class="schedule-day">Monday</div>
+        <div class="schedule-time">19:00 CET · Novedades</div>
+        <div class="schedule-desc">Top 3 crypto prices via CoinGecko API</div>
+      </div>
+      <div class="schedule-item">
+        <div class="schedule-day">Wednesday</div>
+        <div class="schedule-time">19:00 CET · General</div>
+        <div class="schedule-desc">Course reminder — free and premium catalog</div>
+      </div>
+      <div class="schedule-item">
+        <div class="schedule-day">Thursday</div>
+        <div class="schedule-time">20:00 CET · Quiz & Retos</div>
+        <div class="schedule-desc">Weekly quiz from 20-question bank with instant feedback</div>
+      </div>
+    </div>
+
+    <!-- MESSAGE FLOW -->
+    <div class="flow-row">
+      <div class="flow-item"><div class="flow-badge">User message</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-item"><div class="flow-badge">Moderation check</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-item"><div class="flow-badge">Rate limit check</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-item"><div class="flow-badge">Supabase profile</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-item"><div class="flow-badge">Price context?</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-item"><div class="flow-badge">Load SQLite history</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-item"><div class="flow-badge">Claude Haiku</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-item"><div class="flow-badge">Save + reply</div></div>
+    </div>
+
+  </div>
+
+  <footer>
+    github.com/CallejaJ/memento-agent · Built for <a href="https://memento-academy.com">Memento Academy</a>
+  </footer>
+
+</div>
+</body>
+</html>
