@@ -1,3 +1,5 @@
+import { initMemory, loadHistory, saveMessage } from "../memory.js";
+import { shouldFetchPrice, fetchPriceContext } from "../prices.js";
 import { activeQuiz, sendQuiz, startScheduler } from '../scheduler.js';
 import { getProfileByTelegramUsername, getGameStats, getCourseProgress } from '../supabase.js';
 import Anthropic from '@anthropic-ai/sdk';
@@ -194,7 +196,8 @@ export class TelegramChannel {
         const memoSystem = 'Eres Memo, el asistente oficial de Memento Academy. Eres experto en el token MEMO, la moneda de la plataforma. El token MEMO es un ERC-20 en la red Sepolia. Los usuarios lo ganan completando quizzes con 8/10 o mas de puntuacion. Hay bonificaciones de velocidad: +50% si respondes en menos de 3 segundos, +25% en menos de 5 segundos. Multiplicadores de racha: x1.5 con 3 dias seguidos, x2 con 5 dias seguidos. Rangos: Novato (0+), Aprendiz (100+), Experto (500+), Maestro (2000+), Leyenda (10000+). Responde SIEMPRE en espanol, sin formato markdown, maximo 200 palabras.';
         const threadKey = 'memo-token';
         this.pushHistory(threadKey, { role: 'user', content: senderName + ': ' + msg.text });
-        const history = this.getHistory(threadKey);
+        saveMessage(threadKey, "user", senderName + ": " + msg.text);
+        const history = loadHistory(threadKey);
         try {
           const response = await this.anthropic.messages.create({
             model: 'claude-haiku-4-5-20251001',
@@ -204,7 +207,7 @@ export class TelegramChannel {
           });
           const raw = response.content.find((b) => b.type === 'text')?.text ?? '';
           const reply = this.truncateWords(raw);
-          this.pushHistory(threadKey, { role: 'assistant', content: raw });
+          saveMessage(threadKey, "assistant", raw);
           await ctx.api.sendMessage(this.chatId, reply, { message_thread_id: threadId });
         } catch (err) {
           logger.error({ err }, 'Anthropic API error in MEMO Token handler');
@@ -238,13 +241,15 @@ export class TelegramChannel {
         }
       }
 
+      const priceContext = shouldFetchPrice(msg.text) ? await fetchPriceContext(msg.text) : "";
       const system =
         lang === 'es'
-          ? 'Eres Memo, el asistente oficial de Memento Academy, una plataforma educativa gratuita sobre Web3, criptomonedas y blockchain. Ayudas a la comunidad a entender conceptos, resolver dudas sobre los cursos y motivar el aprendizaje. Eres amable, claro y directo. Cursos gratuitos disponibles (usa estos nombres exactos sin cambiarlos): web3-basics, crypto-101, blockchain-dev, cbdc. Cursos premium: defi-deep-dive, nft-masterclass, smart-contracts-101, portfolio-management. Los usuarios ganan tokens MEMO completando quizzes con 8/10 o mas. Responde SIEMPRE en espanol, sin formato markdown, maximo 200 palabras.' + profileContext
+          ? 'Eres Memo, el asistente oficial de Memento Academy, una plataforma educativa gratuita sobre Web3, criptomonedas y blockchain. Ayudas a la comunidad a entender conceptos, resolver dudas sobre los cursos y motivar el aprendizaje. Eres amable, claro y directo. Cursos gratuitos disponibles (usa estos nombres exactos sin cambiarlos): web3-basics, crypto-101, blockchain-dev, cbdc. Cursos premium: defi-deep-dive, nft-masterclass, smart-contracts-101, portfolio-management. Los usuarios ganan tokens MEMO completando quizzes con 8/10 o mas. Responde SIEMPRE en espanol, sin formato markdown, maximo 200 palabras.' + profileContext + priceContext
           : 'You are Memo, the official assistant of Memento Academy, a free educational platform about Web3, crypto and blockchain. You help the community understand concepts and learn about the courses. Free courses: web3-basics, crypto-101, blockchain-dev, cbdc. Premium courses: defi-deep-dive, nft-masterclass, smart-contracts-101, portfolio-management. Users earn MEMO tokens by scoring 8/10 or higher on quizzes. ALWAYS respond in English, no markdown formatting, max 200 words.' + profileContext;
 
       this.pushHistory(threadKey, { role: 'user', content: senderName + ': ' + msg.text });
-      const history = this.getHistory(threadKey);
+        saveMessage(threadKey, "user", senderName + ": " + msg.text);
+        const history = loadHistory(threadKey);
 
       try {
         const response = await this.anthropic.messages.create({
@@ -255,7 +260,7 @@ export class TelegramChannel {
         });
         const raw = response.content.find((b) => b.type === 'text')?.text ?? '';
         const reply = this.truncateWords(raw);
-        this.pushHistory(threadKey, { role: 'assistant', content: raw });
+        saveMessage(threadKey, "assistant", raw);
         await ctx.api.sendMessage(
           this.chatId,
           reply,
@@ -269,6 +274,7 @@ export class TelegramChannel {
 
   async connect(): Promise<void> {
     await this.bot.init();
+    initMemory();
     logger.info({ username: this.bot.botInfo.username }, 'Telegram bot connected');
     startScheduler(this.bot.api);
     this.bot.start({ allowed_updates: ['message', 'chat_member'] }).catch((err) => logger.error({ err }, 'Telegram bot polling error'));

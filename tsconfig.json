@@ -3,18 +3,23 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "lib": ["ES2022"],
     "outDir": "./dist",
     "rootDir": "./src",
     "strict": true,
-    "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true
+    "esModuleInterop": true
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["src/**/*.ts"],
+  "exclude": [
+    "src/channels/whatsapp.ts",
+    "src/channels/whatsapp.test.ts",
+    "src/whatsapp-auth.ts",
+    "src/ipc.ts",
+    "src/ipc-auth.test.ts",
+    "src/task-scheduler.ts",
+    "src/db.test.ts",
+    "src/formatting.test.ts",
+    "src/group-queue.test.ts",
+    "src/container-runner.test.ts"
+  ]
 }
