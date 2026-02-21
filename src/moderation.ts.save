@@ -1,0 +1,47 @@
+const SPAM_PATTERNS = [
+  /https?:\/\//i,
+  /t\.me\//i,
+  /whatsapp/i,
+  /free\s*(crypto|bitcoin|eth|token)/i,
+  /giveaway/i,
+  /airdrop/i,
+  /click\s*here/i,
+  /gratis\s*(crypto|bitcoin|token)/i,
+  /gana\s*(dinero|crypto|bitcoin)/i,
+  /inversion\s*garantizada/i,
+];
+
+const OFFENSIVE_PATTERNS = [
+/\bculo\b/i,
+  /\bsexo\b/i,
+  /\banal\b/i,
+  /\bporno\b/i,
+  /\bpornografia\b/i,
+  /\bpolla\b/i,
+  /\bcoño\b/i,
+  /\bputa\b/i,
+/\bidiota\b/i,
+  /\bestupido\b/i,
+  /\bimbecil\b/i,
+  /\bcabron\b/i,
+  /\bgilipollas\b/i,
+  /\bsubnormal\b/i,
+  /\bmarica\b/i,
+  /\bhijoputa\b/i,
+  /\bmentecato\b/i,
+  /\bzoquete\b/i, 
+];
+
+export function detectSpam(text: string): boolean {
+  return SPAM_PATTERNS.some((p) => p.test(text));
+}
+
+export function detectOffensive(text: string): boolean {
+  return OFFENSIVE_PATTERNS.some((p) => p.test(text));
+}
+
+export function moderationReason(text: string): string | null {
+  if (detectSpam(text)) return 'spam o link sospechoso';
+  if (detectOffensive(text)) return 'lenguaje ofensivo';
+  return null;
+}
