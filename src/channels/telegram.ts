@@ -1,7 +1,8 @@
-import { initMemory, loadHistory, saveMessage } from "../memory.js";
-import { shouldFetchPrice, fetchPriceContext } from "../prices.js";
 import { activeQuiz, sendQuiz, startScheduler } from '../scheduler.js';
 import { getProfileByTelegramUsername, getGameStats, getCourseProgress } from '../supabase.js';
+import { initMemory, loadHistory, saveMessage } from '../memory.js';
+import { shouldFetchPrice, fetchPriceContext } from '../prices.js';
+import { moderationReason } from '../moderation.js';
 import Anthropic from '@anthropic-ai/sdk';
 import { Bot } from 'grammy';
 import { readEnvFile } from '../env.js';
@@ -10,7 +11,6 @@ import { logger } from '../logger.js';
 const TRIGGER = '@MementoAcademyBot';
 const QUIZ_THREAD_ID = 7;
 const MEMO_TOKEN_THREAD_ID = 8;
-const MAX_CONTEXT = 5;
 const MAX_WORDS = 200;
 const RATE_WINDOW_MS = 60 * 60 * 1000;
 const RATE_MAX = 3;
@@ -32,7 +32,6 @@ export class TelegramChannel {
   private anthropic: Anthropic;
   private threadLang = new Map<number, Lang>();
   private rateMap = new Map<number, number[]>();
-  private contextMap = new Map<string, HistoryEntry[]>();
 
   constructor() {
     const env = readEnvFile([
@@ -87,19 +86,6 @@ export class TelegramChannel {
     return words.length <= MAX_WORDS ? text : words.slice(0, MAX_WORDS).join(' ') + '...';
   }
 
-  private getHistory(threadKey: string): HistoryEntry[] {
-    if (!this.contextMap.has(threadKey)) {
-      this.contextMap.set(threadKey, []);
-    }
-    return this.contextMap.get(threadKey)!;
-  }
-
-  private pushHistory(threadKey: string, entry: HistoryEntry): void {
-    const hist = this.getHistory(threadKey);
-    hist.push(entry);
-    if (hist.length > MAX_CONTEXT) hist.splice(0, hist.length - MAX_CONTEXT);
-  }
-
   private setupHandlers(): void {
     // Welcome new members
     this.bot.on('chat_member', async (ctx) => {
@@ -140,6 +126,25 @@ export class TelegramChannel {
       const telegramUsername = msg.from?.username ?? '';
       if (!userId) return;
 
+      // Moderation
+      const reason = moderationReason(text);
+if (reason) {
+        const ownerId = parseInt(process.env.TELEGRAM_OWNER_ID ?? '0');
+        const name = [msg.from?.first_name, msg.from?.last_name].filter(Boolean).join(' ') || 'Usuario';
+        try {
+          await this.bot.api.sendMessage(ownerId, 'Alerta de moderacion en Memento Academy\n\nUsuario: ' + name + '\nMotivo: ' + reason + '\nMensaje: ' + text);
+        } catch (err) {
+          logger.error({ err }, 'Failed to notify owner');
+        }
+        try {
+          await ctx.api.deleteMessage(this.chatId, msg.message_id).catch(() => {});
+          const warningMsg = await ctx.api.sendMessage(this.chatId, name + ", este tipo de contenido no esta permitido en Memento Academy. Por favor, mantengamos la comunidad libre de spam y lenguaje inapropiado.", threadId !== undefined ? { message_thread_id: threadId } : {});
+          setTimeout(() => { ctx.api.deleteMessage(this.chatId, warningMsg.message_id).catch(() => {}); }, 30 * 60 * 1000);
+        } catch (err) {
+          logger.error({ err }, 'Failed to send public warning');
+        }
+        return;
+      }
       // Admin command to launch quiz manually
       if (text === '!quiz') {
         await sendQuiz(this.bot.api);
@@ -149,23 +154,19 @@ export class TelegramChannel {
       // Show user profile stats
       if (text === '!perfil') {
         if (!telegramUsername) {
-          await ctx.api.sendMessage(this.chatId, 'Necesitas tener un username de Telegram configurado. Ve a ajustes de Telegram y añade un username.', threadId !== undefined ? { message_thread_id: threadId } : {});
+          await ctx.api.sendMessage(this.chatId, 'Necesitas tener un username de Telegram configurado.', threadId !== undefined ? { message_thread_id: threadId } : {});
           return;
         }
         const profile = await getProfileByTelegramUsername(telegramUsername);
         if (!profile) {
-          await ctx.api.sendMessage(this.chatId, 'No encuentro tu perfil. Ve a memento.academy, entra en tu perfil y añade tu usuario de Telegram (' + telegramUsername + ') para vincularte.', threadId !== undefined ? { message_thread_id: threadId } : {});
+          await ctx.api.sendMessage(this.chatId, 'No encuentro tu perfil. Ve a memento-academy.com, entra en tu perfil y añade tu usuario de Telegram (' + telegramUsername + ') para vincularte.', threadId !== undefined ? { message_thread_id: threadId } : {});
           return;
         }
         const stats = await getGameStats(profile.id);
         const courses = await getCourseProgress(profile.id);
-        let reply = 'Perfil de ' + (profile.full_name ?? telegramUsername) + '\n';
-        reply += 'Nivel: ' + profile.membership_tier + '\n\n';
+        let reply = 'Perfil de ' + (profile.full_name ?? telegramUsername) + '\nNivel: ' + profile.membership_tier + '\n\n';
         if (stats && stats.total_sessions > 0) {
-          reply += 'Sesiones de juego: ' + stats.total_sessions + '\n';
-          reply += 'Mejor puntuacion: ' + stats.best_score + '/10\n';
-          reply += 'Racha maxima: ' + stats.max_streak + '\n';
-          reply += 'Sesiones recompensadas: ' + stats.total_rewarded + '\n\n';
+          reply += 'Sesiones de juego: ' + stats.total_sessions + '\nMejor puntuacion: ' + stats.best_score + '/10\nRacha maxima: ' + stats.max_streak + '\nSesiones recompensadas: ' + stats.total_rewarded + '\n\n';
         }
         if (courses.length > 0) {
           reply += 'Progreso en cursos:\n';
@@ -195,8 +196,7 @@ export class TelegramChannel {
         const senderName = [msg.from?.first_name, msg.from?.last_name].filter(Boolean).join(' ') || 'User';
         const memoSystem = 'Eres Memo, el asistente oficial de Memento Academy. Eres experto en el token MEMO, la moneda de la plataforma. El token MEMO es un ERC-20 en la red Sepolia. Los usuarios lo ganan completando quizzes con 8/10 o mas de puntuacion. Hay bonificaciones de velocidad: +50% si respondes en menos de 3 segundos, +25% en menos de 5 segundos. Multiplicadores de racha: x1.5 con 3 dias seguidos, x2 con 5 dias seguidos. Rangos: Novato (0+), Aprendiz (100+), Experto (500+), Maestro (2000+), Leyenda (10000+). Responde SIEMPRE en espanol, sin formato markdown, maximo 200 palabras.';
         const threadKey = 'memo-token';
-        this.pushHistory(threadKey, { role: 'user', content: senderName + ': ' + msg.text });
-        saveMessage(threadKey, "user", senderName + ": " + msg.text);
+        saveMessage(threadKey, 'user', senderName + ': ' + msg.text);
         const history = loadHistory(threadKey);
         try {
           const response = await this.anthropic.messages.create({
@@ -207,7 +207,7 @@ export class TelegramChannel {
           });
           const raw = response.content.find((b) => b.type === 'text')?.text ?? '';
           const reply = this.truncateWords(raw);
-          saveMessage(threadKey, "assistant", raw);
+          saveMessage(threadKey, 'assistant', raw);
           await ctx.api.sendMessage(this.chatId, reply, { message_thread_id: threadId });
         } catch (err) {
           logger.error({ err }, 'Anthropic API error in MEMO Token handler');
@@ -241,15 +241,16 @@ export class TelegramChannel {
         }
       }
 
-      const priceContext = shouldFetchPrice(msg.text) ? await fetchPriceContext(msg.text) : "";
+      // Enrich context with real-time prices if needed
+      const priceContext = shouldFetchPrice(msg.text) ? await fetchPriceContext(msg.text) : '';
+
       const system =
         lang === 'es'
           ? 'Eres Memo, el asistente oficial de Memento Academy, una plataforma educativa gratuita sobre Web3, criptomonedas y blockchain. Ayudas a la comunidad a entender conceptos, resolver dudas sobre los cursos y motivar el aprendizaje. Eres amable, claro y directo. Cursos gratuitos disponibles (usa estos nombres exactos sin cambiarlos): web3-basics, crypto-101, blockchain-dev, cbdc. Cursos premium: defi-deep-dive, nft-masterclass, smart-contracts-101, portfolio-management. Los usuarios ganan tokens MEMO completando quizzes con 8/10 o mas. Responde SIEMPRE en espanol, sin formato markdown, maximo 200 palabras.' + profileContext + priceContext
-          : 'You are Memo, the official assistant of Memento Academy, a free educational platform about Web3, crypto and blockchain. You help the community understand concepts and learn about the courses. Free courses: web3-basics, crypto-101, blockchain-dev, cbdc. Premium courses: defi-deep-dive, nft-masterclass, smart-contracts-101, portfolio-management. Users earn MEMO tokens by scoring 8/10 or higher on quizzes. ALWAYS respond in English, no markdown formatting, max 200 words.' + profileContext;
+          : 'You are Memo, the official assistant of Memento Academy, a free educational platform about Web3, crypto and blockchain. You help the community understand concepts and learn about the courses. Free courses: web3-basics, crypto-101, blockchain-dev, cbdc. Premium courses: defi-deep-dive, nft-masterclass, smart-contracts-101, portfolio-management. Users earn MEMO tokens by scoring 8/10 or higher on quizzes. ALWAYS respond in English, no markdown formatting, max 200 words.' + profileContext + priceContext;
 
-      this.pushHistory(threadKey, { role: 'user', content: senderName + ': ' + msg.text });
-        saveMessage(threadKey, "user", senderName + ": " + msg.text);
-        const history = loadHistory(threadKey);
+      saveMessage(threadKey, 'user', senderName + ': ' + msg.text);
+      const history = loadHistory(threadKey);
 
       try {
         const response = await this.anthropic.messages.create({
@@ -260,7 +261,7 @@ export class TelegramChannel {
         });
         const raw = response.content.find((b) => b.type === 'text')?.text ?? '';
         const reply = this.truncateWords(raw);
-        saveMessage(threadKey, "assistant", raw);
+        saveMessage(threadKey, 'assistant', raw);
         await ctx.api.sendMessage(
           this.chatId,
           reply,
